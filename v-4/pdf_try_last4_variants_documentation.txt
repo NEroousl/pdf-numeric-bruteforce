@@ -1,0 +1,139 @@
+PDF Brute-Force Variant - Documentation
+=========================================
+
+Filename: pdf_try_last4_variants.py
+Purpose:
+--------
+This script brute-forces PDF passwords based on the "last 4 digits" hint and
+tries multiple plausible encodings/variants for each 4-digit candidate. It is
+designed to increase the chance of opening PDFs where the expected 4-digit
+value may be encoded or transformed before being used as the PDF password.
+
+Key Differences from a Simple Brute-Forcer:
+------------------------------------------
+- For each numeric candidate (0000..9999, or positions indicated by a mask),
+  the script attempts multiple variants rather than only the raw ASCII digits.
+- Variants include: plain string, reversed string, UTF-8 bytes, UTF-16LE bytes,
+  UTF-16BE bytes, and reversed+encoded variants.
+- Tries pikepdf first (preferred) and falls back to PyPDF2/pypdf if pikepdf
+  is not available.
+- Logs every attempt to an output file (output.txt) and prints each attempt to
+  the console (very verbose). The script stops as soon as a variant successfully
+  opens the PDF.
+
+Why multiple variants?
+----------------------
+Banks or third-party software may transform or encode the 'last 4 digits' when
+they create the PDF password (for example: using UTF-16 encoding, reversing the
+digits, or applying a small prefix/suffix). Trying common variants reduces the
+chance of missing the correct password because of such transformations.
+
+Usage and Command-Line Examples
+-------------------------------
+1) Standard brute-force last 4 digits (0000..9999):
+   PowerShell (recommended for Windows users):
+     .\venv\Scripts\python.exe .\pdf_try_last4_variants.py C:\path\to\file.pdf
+
+   This will iterate 0000 through 9999 as the "base" digits and try variants for
+   each base candidate.
+
+2) Use a mask with wildcards ('*') to only brute-force specific positions:
+   Example mask: '802603****' where '*' represents unknown digits:
+     .\venv\Scripts\python.exe .\pdf_try_last4_variants.py C:\path\to\file.pdf '802603****'
+
+   Important: In PowerShell quote the mask so the shell does not expand the '*'.
+
+3) Direct venv python call without activating the environment:
+   If you prefer not to run Activate.ps1, call the venv python directly:
+     .\venv\Scripts\python.exe -m pip install pikepdf
+     .\venv\Scripts\python.exe pdf_try_last4_variants.py C:\path\to\file.pdf '802603****'
+
+Requirements
+------------
+- Python 3.8+ recommended.
+- One of these PDF libraries:
+  - pikepdf (preferred): pip install pikepdf
+  - pypdf (PyPDF2 replacement): pip install pypdf  (used as fallback)
+- On Windows, you may need to adjust PowerShell execution policy to run virtualenv
+  activation scripts (optional). To allow local scripts for the current user:
+     Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force
+
+What the Script Tries for Each Numeric Candidate
+------------------------------------------------
+For each base candidate (e.g., "0123") the script constructs and tests this set:
+ - "0123"                (plain string)
+ - "3210"                (reversed string)
+ - UTF-8 bytes of "0123"
+ - UTF-8 bytes of "3210"
+ - UTF-16LE bytes of "0123"
+ - UTF-16LE bytes of "3210"
+ - UTF-16BE bytes of "0123"
+ - UTF-16BE bytes of "3210"
+
+If the underlying PDF library accepts bytes directly (pikepdf does), the script
+passes bytes; if the library requires text (pypdf), the script attempts to
+decode bytes to a string using typical encodings before trying to decrypt.
+
+Output and Log Format
+---------------------
+- Console: The script prints every attempt in the form:
+    [<attempt_number>] Trying base=<base_digits> variant=(<type>) -> PASS/FAIL (elapsed X.XXXs)
+
+- Log file: output.txt (overwritten on each run) with CSV-like lines:
+    Attempt,PasswordVariant,Type,Result,ElapsedSeconds
+  Example line:
+    37,0123,str,FAIL,0.092
+
+- At success the script appends a summary line containing the successful base
+  digits, the variant (string or hex bytes), attempt count, and elapsed time.
+
+Verification & Troubleshooting
+------------------------------
+- If the script seems to "skip" candidates, check output.txt to confirm every
+  attempt is recorded. For example, count attempt lines (PowerShell):
+    (Get-Content .\output.txt | Where-Object { $_ -match '^\d+,' }).Count
+  For a full last-4 brute force you should see ~10,000 attempt lines (plus header).
+
+- If nothing is found:
+  1) The bank might use a prefix/suffix, checksum, or non-digit characters. If
+     you know the prefix/suffix (e.g., 'BANK' + last4) you can adapt the script
+     to try those patterns.
+  2) The account number might include spaces/dashes or be transformed; confirm
+     the exact rule. Provide details if available and the script can be extended.
+  3) The PDF could be protected with a different kind of password (owner vs
+     user password) or be corrupted; try opening with a PDF viewer to verify.
+
+Performance & Scaling Suggestions
+---------------------------------
+- The default script is single-threaded and will attempt variants sequentially.
+  Single-thread performance is usually enough for 10k candidates (~few seconds
+  to minutes depending on environment and PDF library).
+
+- For larger search spaces (many wildcards), consider:
+  - Partitioning the range and running multiple instances in parallel on
+    different CPU cores or machines (e.g., one instance for 0000..2499, one for
+    2500..4999, etc.).
+  - Implementing multiprocessing with a shared queue and careful IO handling.
+  - Using more specific masks to reduce the candidate count.
+
+Extending the Variant Set
+-------------------------
+If you suspect other transformations, add variants such as:
+ - Append or prepend fixed characters (e.g., 'A' + last4, or last4 + '!' )
+ - Try numeric checksums (Luhn, mod10) appended to digits
+ - Try uppercase/lowercase letter combinations if account number uses
+   alphanumeric characters
+
+Safety & Legal Reminder
+-----------------------
+Only use this script on PDFs you own or are explicitly authorized to test. Bypassing
+security protections on documents without permission may be illegal.
+
+Contact & Next Steps
+--------------------
+If you run the script and it does not find the password, please provide:
+ - The exact hint text (you already provided "last 4 digits of your account number")
+ - The full account-number format (how many digits, any dashes or spaces)
+ - Any observed successful variant output lines from output.txt (last 20 lines)
+With that information I can extend the script to try likely prefixes, suffixes,
+or custom encodings specific to your bank's PDF generation method.
