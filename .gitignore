@@ -1,1 +1,5 @@
-/output.txt
+# Ignore all PDF files
+*.pdf
+
+# Ignore any output.txt files (in any folder)
+**/output.txt
